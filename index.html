@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DermAI — Skin Disease Classification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ── RESET & TOKENS ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  :root {
+    --bg:        #0a0c10;
+    --surface:   #111318;
+    --surface2:  #181c24;
+    --border:    rgba(255,255,255,0.07);
+    --border2:   rgba(255,255,255,0.13);
+    --text:      #e8eaf0;
+    --muted:     #6b7280;
+    --accent:    #38bdf8;
+    --accent2:   #0ea5e9;
+    --green:     #22c55e;
+    --orange:    #f97316;
+    --red:       #ef4444;
+    --yellow:    #eab308;
+    --serif:     'DM Serif Display', serif;
+    --mono:      'DM Mono', monospace;
+    --sans:      'Inter', sans-serif;
+    --radius:    12px;
+    --radius-lg: 20px;
+    --shadow:    0 4px 24px rgba(0,0,0,0.5);
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── BACKGROUND GRID ────────────────────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── NOISE TEXTURE ──────────────────────────────────────────────────────── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0; opacity: 0.4;
+  }
+
+  /* ── LAYOUT ─────────────────────────────────────────────────────────────── */
+  .wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── HEADER ─────────────────────────────────────────────────────────────── */
+  header {
+    padding: 40px 0 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .logo-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 20px rgba(56,189,248,0.3);
+  }
+  .logo-text { font-family: var(--serif); font-size: 1.6rem; letter-spacing: -0.5px; }
+  .logo-text span { color: var(--accent); }
+  .badge {
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(56,189,248,0.1); color: var(--accent);
+    border: 1px solid rgba(56,189,248,0.2);
+    letter-spacing: 0.5px;
+  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .disclaimer {
+    font-size: 11px; color: var(--muted); max-width: 220px; text-align: right; line-height: 1.4;
+  }
+
+  /* ── HERO ───────────────────────────────────────────────────────────────── */
+  .hero {
+    padding: 64px 0 48px;
+    text-align: center;
+  }
+  .hero-eyebrow {
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 20px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .hero-eyebrow::before, .hero-eyebrow::after {
+    content: ''; width: 40px; height: 1px; background: var(--accent); opacity: 0.4;
+  }
+  .hero h1 {
+    font-family: var(--serif); font-size: clamp(2.4rem, 5vw, 3.8rem);
+    line-height: 1.1; letter-spacing: -1px;
+    background: linear-gradient(135deg, #e8eaf0, #94a3b8);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 20px;
+  }
+  .hero h1 em { font-style: italic; -webkit-text-fill-color: var(--accent); }
+  .hero p {
+    color: var(--muted); max-width: 520px; margin: 0 auto;
+    font-size: 1.05rem; line-height: 1.7; font-weight: 300;
+  }
+
+  /* ── UPLOAD ZONE ────────────────────────────────────────────────────────── */
+  .upload-section { padding: 0 0 64px; }
+  .upload-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .upload-drop {
+    position: relative;
+    padding: 64px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius-lg);
+    margin: 24px;
+  }
+  .upload-drop:hover { background: rgba(56,189,248,0.03); border-color: rgba(56,189,248,0.3); }
+  .upload-drop.dragover { background: rgba(56,189,248,0.06); border-color: var(--accent); }
+  #fileInput { display: none; }
+  .upload-icon {
+    width: 72px; height: 72px; margin: 0 auto 20px;
+    background: var(--surface2);
+    border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px;
+    border: 1px solid var(--border2);
+    transition: transform 0.2s;
+  }
+  .upload-drop:hover .upload-icon { transform: translateY(-3px); }
+  .upload-title { font-family: var(--serif); font-size: 1.5rem; margin-bottom: 8px; }
+  .upload-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
+  .btn-upload {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 28px; border-radius: var(--radius);
+    background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+    color: #0a0c10; font-weight: 600; font-size: 0.9rem;
+    cursor: pointer; transition: all 0.2s;
+    border: none; box-shadow: 0 0 20px rgba(56,189,248,0.25);
+  }
+  .btn-upload:hover { transform: translateY(-1px); box-shadow: 0 0 30px rgba(56,189,248,0.4); }
+
+  /* ── PREVIEW ─────────────────────────────────────────────────────────────── */
+  #preview-section { display: none; padding: 0 24px 24px; }
+  .preview-inner {
+    display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center;
+    background: var(--surface2); border-radius: var(--radius); padding: 20px;
+    border: 1px solid var(--border);
+  }
+  .preview-img {
+    width: 100px; height: 100px; object-fit: cover;
+    border-radius: var(--radius); border: 1px solid var(--border2);
+  }
+  .preview-info { flex: 1; }
+  .preview-name { font-weight: 500; margin-bottom: 4px; }
+  .preview-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .btn-analyze {
+    margin-top: 12px;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 24px; border-radius: var(--radius);
+    background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+    color: #0a0c10; font-weight: 600; font-size: 0.9rem;
+    cursor: pointer; transition: all 0.2s; border: none;
+  }
+  .btn-analyze:hover { transform: translateY(-1px); }
+  .btn-clear {
+    margin-top: 12px; margin-left: 8px;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px; border-radius: var(--radius);
+    background: transparent; color: var(--muted); font-size: 0.9rem;
+    cursor: pointer; transition: color 0.2s; border: 1px solid var(--border2);
+  }
+  .btn-clear:hover { color: var(--text); border-color: var(--border2); }
+
+  /* ── LOADING ─────────────────────────────────────────────────────────────── */
+  #loading { display: none; padding: 40px; text-align: center; }
+  .spinner {
+    width: 48px; height: 48px; margin: 0 auto 16px;
+    border: 3px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--muted); font-size: 0.9rem; }
+  .loading-dots::after {
+    content: ''; animation: dots 1.5s steps(4, end) infinite;
+  }
+  @keyframes dots {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%  { content: '...'; }
+  }
+
+  /* ── RESULTS ─────────────────────────────────────────────────────────────── */
+  #results { display: none; padding: 0 24px 32px; }
+
+  /* Primary result card */
+  .result-primary {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    margin-bottom: 20px;
+    position: relative; overflow: hidden;
+    animation: fadeUp 0.4s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .result-primary::before {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: var(--result-color, #38bdf8);
+  }
+  .result-header { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+  .result-img { width: 80px; height: 80px; object-fit: cover; border-radius: 10px; flex-shrink: 0; }
+  .result-title-group { flex: 1; }
+  .result-label { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .result-class { font-family: var(--serif); font-size: 1.8rem; line-height: 1.2; margin-bottom: 4px; }
+  .result-short { color: var(--muted); font-size: 0.9rem; }
+  .result-confidence-block { text-align: right; flex-shrink: 0; }
+  .result-conf-pct {
+    font-family: var(--mono); font-size: 2.2rem; font-weight: 500;
+    color: var(--result-color, var(--accent)); line-height: 1;
+  }
+  .result-conf-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Risk badge */
+  .risk-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
+    border: 1px solid;
+  }
+  .risk-Low    { background: rgba(34,197,94,0.1);  color: var(--green);  border-color: rgba(34,197,94,0.3); }
+  .risk-Medium { background: rgba(234,179,8,0.1);  color: var(--yellow); border-color: rgba(234,179,8,0.3); }
+  .risk-Medium-High { background: rgba(249,115,22,0.1); color: var(--orange); border-color: rgba(249,115,22,0.3); }
+  .risk-High   { background: rgba(239,68,68,0.1);  color: var(--red);    border-color: rgba(239,68,68,0.3); }
+
+  .result-description { color: var(--muted); font-size: 0.92rem; line-height: 1.7; margin: 16px 0; }
+  .result-action {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: rgba(56,189,248,0.06); border: 1px solid rgba(56,189,248,0.15);
+    border-radius: var(--radius); padding: 14px 16px;
+    font-size: 0.88rem; line-height: 1.6;
+  }
+  .result-action-icon { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+
+  /* Probability bars */
+  .prob-section { margin-bottom: 20px; animation: fadeUp 0.4s 0.1s ease both; }
+  .prob-title { font-size: 13px; font-weight: 500; margin-bottom: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .prob-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .prob-name { font-size: 12px; width: 170px; flex-shrink: 0; color: var(--text); line-height: 1.3; }
+  .prob-bar-wrap { flex: 1; height: 6px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .prob-bar { height: 100%; border-radius: 99px; transition: width 0.8s ease; background: var(--accent); }
+  .prob-val { font-family: var(--mono); font-size: 12px; color: var(--muted); width: 48px; text-align: right; }
+
+  /* Top-K cards */
+  .topk-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px; animation: fadeUp 0.4s 0.2s ease both; }
+  .topk-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    position: relative; overflow: hidden;
+  }
+  .topk-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--card-color, var(--accent)); }
+  .topk-rank { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .topk-name { font-weight: 500; font-size: 0.88rem; margin-bottom: 4px; }
+  .topk-conf { font-family: var(--mono); font-size: 1.1rem; color: var(--card-color, var(--accent)); }
+
+  /* ── INFO GRID ───────────────────────────────────────────────────────────── */
+  .info-section { padding: 0 0 80px; }
+  .section-title {
+    font-family: var(--serif); font-size: 1.8rem; margin-bottom: 8px;
+  }
+  .section-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; }
+  .disease-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .disease-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    transition: border-color 0.2s, transform 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .disease-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+  .disease-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--dc, var(--accent)); }
+  .dc-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
+  .dc-short { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .dc-risk { font-size: 11px; font-family: var(--mono); }
+
+  /* ── FOOTER ─────────────────────────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border); padding: 24px 0;
+    text-align: center; color: var(--muted); font-size: 12px; line-height: 1.7;
+  }
+  footer strong { color: var(--text); }
+
+  /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .result-header { flex-direction: column; }
+    .result-confidence-block { text-align: left; }
+    .header-right { display: none; }
+    .prob-name { width: 120px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🩺</div>
+      <div class="logo-text">Derm<span>AI</span></div>
+      <div class="badge">v1.0 · EfficientNetB3</div>
+    </div>
+    <div class="header-right">
+      <p class="disclaimer">⚠️ For research use only.<br>Not a substitute for medical advice.</p>
+    </div>
+  </header>
+
+  <!-- ── HERO ───────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-eyebrow">Deep Learning · Dermoscopy · HAM10000</div>
+    <h1>Classify <em>skin conditions</em><br>with neural precision</h1>
+    <p>Upload a dermoscopic image and receive instant AI-powered predictions across 7 skin conditions, with confidence scores and clinical context.</p>
+  </section>
+
+  <!-- ── UPLOAD ─────────────────────────────────────────────────────────── -->
+  <section class="upload-section">
+    <div class="upload-card">
+      <div class="upload-drop" id="dropZone">
+        <div class="upload-icon">🔬</div>
+        <div class="upload-title">Drop your image here</div>
+        <div class="upload-sub">PNG, JPG, JPEG, BMP, WEBP up to 10 MB</div>
+        <label class="btn-upload" for="fileInput">
+          <span>📁</span> Choose Image
+        </label>
+        <input type="file" id="fileInput" accept="image/*" />
+      </div>
+
+      <!-- Preview -->
+      <div id="preview-section">
+        <div class="preview-inner">
+          <img id="previewImg" class="preview-img" src="" alt="preview" />
+          <div class="preview-info">
+            <div class="preview-name" id="previewName">filename.jpg</div>
+            <div class="preview-meta" id="previewMeta">0 KB · image/jpeg</div>
+            <div style="margin-top: 12px;">
+              <button class="btn-analyze" id="analyzeBtn">✨ Analyze Image</button>
+              <button class="btn-clear" id="clearBtn">✕ Clear</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Analyzing image<span class="loading-dots"></span></div>
+      </div>
+
+      <!-- Results -->
+      <div id="results">
+        <!-- Primary Result -->
+        <div class="result-primary" id="resultPrimary">
+          <div class="result-header">
+            <img id="resultImg" class="result-img" src="" alt="" />
+            <div class="result-title-group">
+              <div class="result-label">Primary Diagnosis</div>
+              <div class="result-class" id="resultClass">—</div>
+              <div class="result-short" id="resultShort">—</div>
+            </div>
+            <div class="result-confidence-block">
+              <div class="result-conf-pct" id="resultConf">—%</div>
+              <div class="result-conf-label">Confidence</div>
+              <div style="margin-top: 8px;">
+                <span class="risk-badge" id="resultRisk">—</span>
+              </div>
+            </div>
+          </div>
+          <p class="result-description" id="resultDesc">—</p>
+          <div class="result-action">
+            <span class="result-action-icon">💡</span>
+            <span id="resultAction">—</span>
+          </div>
+        </div>
+
+        <!-- Top-K -->
+        <div class="topk-section" id="topkSection"></div>
+
+        <!-- Probability Bars -->
+        <div class="prob-section">
+          <div class="prob-title">All class probabilities</div>
+          <div id="probBars"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DISEASE REFERENCE ──────────────────────────────────────────────── -->
+  <section class="info-section">
+    <div class="section-title">Supported Conditions</div>
+    <div class="section-sub">7 skin conditions from the HAM10000 benchmark dataset</div>
+    <div class="disease-grid" id="diseaseGrid"></div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
+  <footer>
+    <strong>DermAI</strong> — Skin Disease Classification System<br>
+    Built with EfficientNetB3 · Trained on HAM10000 · Deep Learning for Dermatology<br>
+    ⚠️ This tool is for <strong>research and educational purposes only</strong>. Always consult a qualified dermatologist for medical advice.
+  </footer>
+
+</div>
+
+<script>
+// ── CLASS DATA (injected from Flask / hardcoded for standalone) ─────────────
+const CLASS_INFO = {
+  'Melanocytic Nevi':      { short: 'Common mole (benign)',         risk: 'Low',         color: '#22c55e' },
+  'Melanoma':              { short: 'Skin cancer (malignant)',       risk: 'High',        color: '#ef4444' },
+  'Benign Keratosis':      { short: 'Non-cancerous skin growth',    risk: 'Low',         color: '#22c55e' },
+  'Basal Cell Carcinoma':  { short: 'Skin cancer (slow-growing)',   risk: 'Medium-High', color: '#f97316' },
+  'Actinic Keratosis':     { short: 'Pre-cancerous lesion',         risk: 'Medium',      color: '#eab308' },
+  'Vascular Lesions':      { short: 'Blood vessel anomaly',         risk: 'Low',         color: '#22c55e' },
+  'Dermatofibroma':        { short: 'Benign skin nodule',           risk: 'Low',         color: '#22c55e' },
+};
+
+// ── POPULATE DISEASE GRID ───────────────────────────────────────────────────
+const grid = document.getElementById('diseaseGrid');
+Object.entries(CLASS_INFO).forEach(([name, info]) => {
+  grid.innerHTML += `
+    <div class="disease-card" style="--dc: ${info.color}">
+      <div class="dc-name">${name}</div>
+      <div class="dc-short">${info.short}</div>
+      <span class="risk-badge risk-${info.risk.replace(' ', '-')}" style="font-size:11px;">
+        Risk: ${info.risk}
+      </span>
+    </div>`;
+});
+
+// ── DRAG & DROP ─────────────────────────────────────────────────────────────
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const previewSec = document.getElementById('preview-section');
+const previewImg = document.getElementById('previewImg');
+const previewName = document.getElementById('previewName');
+const previewMeta = document.getElementById('previewMeta');
+let selectedFile = null;
+
+['dragover','dragenter'].forEach(e => dropZone.addEventListener(e, ev => {
+  ev.preventDefault(); dropZone.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => {
+  ev.preventDefault(); dropZone.classList.remove('dragover');
+}));
+dropZone.addEventListener('drop', ev => handleFile(ev.dataTransfer.files[0]));
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  previewName.textContent = file.name;
+  previewMeta.textContent = `${(file.size / 1024).toFixed(1)} KB · ${file.type}`;
+  previewSec.style.display = 'block';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('loading').style.display = 'none';
+  dropZone.style.display = 'none';
+}
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  selectedFile = null; fileInput.value = '';
+  previewSec.style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  dropZone.style.display = 'block';
+});
+
+// ── ANALYZE ─────────────────────────────────────────────────────────────────
+document.getElementById('analyzeBtn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  previewSec.style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('results').style.display = 'none';
+
+  const formData = new FormData();
+  formData.append('image', selectedFile);
+
+  try {
+    const res  = await fetch('/api/predict', { method: 'POST', body: formData });
+    const data = await res.json();
+    document.getElementById('loading').style.display = 'none';
+
+    if (!data.success) {
+      alert('Error: ' + (data.error || 'Unknown error'));
+      dropZone.style.display = 'block';
+      return;
+    }
+    renderResults(data);
+  } catch (err) {
+    document.getElementById('loading').style.display = 'none';
+    alert('Network error. Is the Flask server running?');
+    dropZone.style.display = 'block';
+  }
+});
+
+// ── RENDER RESULTS ───────────────────────────────────────────────────────────
+function renderResults(data) {
+  const color = data.color || '#38bdf8';
+  const riskClass = 'risk-' + data.risk.replace(/ /g, '-');
+
+  // Primary card
+  const primary = document.getElementById('resultPrimary');
+  primary.style.setProperty('--result-color', color);
+  document.getElementById('resultImg').src   = data.thumbnail;
+  document.getElementById('resultClass').textContent = data.predicted_class;
+  document.getElementById('resultShort').textContent = data.short;
+  document.getElementById('resultConf').textContent  = data.confidence + '%';
+  document.getElementById('resultConf').style.color  = color;
+  document.getElementById('resultDesc').textContent  = data.description;
+  document.getElementById('resultAction').textContent = data.action;
+
+  const riskEl = document.getElementById('resultRisk');
+  riskEl.textContent = '⚠️ Risk: ' + data.risk;
+  riskEl.className = 'risk-badge ' + riskClass;
+
+  // Top-K cards
+  const topk = document.getElementById('topkSection');
+  topk.innerHTML = data.top_k.map((r, i) => `
+    <div class="topk-card" style="--card-color: ${r.color}">
+      <div class="topk-rank">#${i+1} Match</div>
+      <div class="topk-name">${r.class}</div>
+      <div style="font-size:11px; color: var(--muted); margin-bottom: 8px;">${r.short}</div>
+      <div class="topk-conf">${r.confidence}%</div>
+    </div>`).join('');
+
+  // Probability bars
+  const bars = document.getElementById('probBars');
+  const sorted = Object.entries(data.all_probabilities).sort((a, b) => b[1] - a[1]);
+  bars.innerHTML = sorted.map(([cls, prob]) => {
+    const info = CLASS_INFO[cls] || {};
+    return `
+      <div class="prob-row">
+        <div class="prob-name">${cls}</div>
+        <div class="prob-bar-wrap">
+          <div class="prob-bar" style="width: 0%; background: ${info.color || '#38bdf8'}"
+               data-target="${prob}"></div>
+        </div>
+        <div class="prob-val">${prob}%</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('results').style.display = 'block';
+
+  // Animate bars
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.prob-bar').forEach(bar => {
+      const target = parseFloat(bar.dataset.target);
+      setTimeout(() => bar.style.width = target + '%', 100);
+    });
+  });
+
+  previewSec.style.display = 'none';
+}
+</script>
+</body>
+</html>
